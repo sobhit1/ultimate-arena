@@ -8,22 +8,21 @@ const publicKey = fs.readFileSync(path.resolve('public.key'), 'utf8');
 
 const verifyToken = (jwtToken) => {
     try {
-        return jwt.verify(jwtToken, publicKey, { algorithm: ['RS256'] });
+        return jwt.verify(jwtToken, publicKey, { algorithms: ['RS256'] });
     }
     catch (err) {
-        throw new Error("Invalid Token", err.message);
+        throw new Error(`Invalid Token: ${err.message}`);
     }
 }
 
 const generateToken = (user) => {
     try {
         const payload = {
-            id: user.id,
+            userID: user.userID,
             name: user.name,
-            email: user.email
+            user_name: user.user_name
         };
         const jwtToken = jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: '1d' });
-
         return jwtToken;
     }
     catch (err) {
