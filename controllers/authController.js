@@ -4,7 +4,7 @@ import authService from "../services/authService.js";
 
 const register = async (req, res) => {
     const { name, user_name, password } = req.body;
-    
+
     if (!name?.trim() || !user_name?.trim() || !password?.trim()) {
         return res.status(400).json({ error: 'All fields are required' });
     }
@@ -23,10 +23,18 @@ const register = async (req, res) => {
             maxAge: 24 * 60 * 60 * 1000
         });
 
-        return res.status(201).json({ message: 'User registered successfully!', userID: result.insertId, userName: name, user_name: user_name });
-    }
+        return res.status(201).json({ 
+            message: 'User registered successfully!', 
+            userID: result.insertId, 
+            userName: name, 
+            user_name: user_name 
+        });
+    } 
     catch (err) {
-        return res.status(500).json({ Error: 'Registration failed. Please try again.', Details: err.message });
+        return res.status(500).json({ 
+            Error: 'Registration failed. Please try again.', 
+            Details: err.message 
+        });
     }
 }
 
@@ -49,7 +57,7 @@ const login = async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ Error: 'Invalid Credentials.' });
         }
-        
+
         const jwtToken = authService.generateToken(user[0]);
 
         res.cookie('token', jwtToken, {
@@ -59,10 +67,18 @@ const login = async (req, res) => {
             maxAge: 24 * 60 * 60 * 1000
         });
 
-        return res.status(200).json({ message: 'User logged in successfully!', userID: user[0].userID, userName: user[0].name, user_name: user[0].user_name });
-    }
+        return res.status(200).json({ 
+            message: 'User logged in successfully!', 
+            userID: user[0].userID, 
+            userName: user[0].name, 
+            user_name: user[0].user_name 
+        });
+    } 
     catch (err) {
-        return res.status(500).json({ Error: 'Login failed. Please try again.', Details: err.message });
+        return res.status(500).json({ 
+            Error: 'Login failed. Please try again.', 
+            Details: err.message 
+        });
     }
 }
 

@@ -7,4 +7,11 @@ const completeProfile = (userID, codeForcesID) => {
     );
 }
 
-export default {completeProfile};
+const getProfile = (userID) => {
+    return db.query(
+        'SELECT * FROM profile WHERE userID=?',
+        [userID]
+    );
+}
+
+export default { completeProfile, getProfile };
