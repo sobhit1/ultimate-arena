@@ -1,29 +1,37 @@
-import profile from "../models/profile.js";
+import apiError from '../utils/apiError.js';
+import apiResponse from '../utils/apiResponse.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import prisma from '../config/prisma.js';
 
-const updateProfile = async (req, res) => {
-    const userID = req.user.userID;
-    const { codeForcesID } = req.body;
-    const url = `https://codeforces.com/api/user.info?handles=${codeForcesID}`;
+const updateProfile = asyncHandler(
+    async (req, res) => {
+        const id = req.user.id;
+        const { codeForcesID } = req.body;
+        const url = `https://codeforces.com/api/user.info?handles=${codeForcesID}`;
 
-    try {
         const response = await fetch(url);
 
         if (!response.ok) {
-            throw new Error(`Invalid CodeForces Username: ${codeForcesID}`);
+            throw new apiError(400, `Invalid CodeForces Username: ${codeForcesID}`);
         }
 
-        await profile.completeProfile(userID, codeForcesID);
+        const profile = await prisma.codeForcesID.create({
+            data: {
+                codeForcesID,
+                userId: id
+            }
+        });
 
-        return res.status(200).json({ 
-            message: 'Profile updated successfully!' 
-        });
-    } 
-    catch (err) {
-        return res.status(500).json({ 
-            Error: 'Not able to complete profile.', 
-            Details: err.message 
-        });
+        return res
+            .status(200)
+            .json(
+                new apiResponse(
+                    200,
+                    { profile },
+                    "Profile updated successfully!"
+                )
+            )
     }
-}
+);
 
 export default { updateProfile };

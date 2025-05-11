@@ -11,23 +11,38 @@ const verifyToken = (jwtToken) => {
         return jwt.verify(jwtToken, publicKey, { algorithms: ['RS256'] });
     }
     catch (err) {
-        throw new Error(`Invalid Token: ${err.message}`);
+        throw new Error(`Invalid or Expired Refresh Token: ${err.message}`);
     }
 }
 
-const generateToken = (user) => {
+const generateAccessToken = (user) => {
     try {
         const payload = {
-            userID: user.userID,
+            id: user.id,
             name: user.name,
             user_name: user.user_name
         };
-        const jwtToken = jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: '1d' });
-        return jwtToken;
+        const AccessToken = jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: process.env.ACCESS_TOKEN_EXPIRY });
+        return AccessToken;
     }
     catch (err) {
-        throw new Error(`Error Generating token: ${err.message}`);
+        throw new Error(`Error generating Access token: ${err.message}`);
     }
 }
 
-export default { generateToken, verifyToken };
+const generateRefreshToken = (user) => {
+    try {
+        const payload = {
+            id: user.id,
+            name: user.name,
+            user_name: user.user_name
+        };
+        const RefreshToken = jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: process.env.REFRESH_TOKEN_EXPIRY });
+        return RefreshToken;
+    }
+    catch (err) {
+        throw new Error(`Error generating Refresh token: ${err.message}`);
+    }
+}
+
+export default { verifyToken, generateAccessToken, generateRefreshToken };

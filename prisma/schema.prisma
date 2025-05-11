@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int            @id @default(autoincrement())
+  name           String
+  user_name      String         @unique
+  password       String
+  refreshToken   String?
+  codeForcesIDs  CodeForcesID[]
+  contests       Contest[]
+  participant    Participant[]
+  solvedProblems Problem[]
+
+  @@map("users")
+}
+
+model CodeForcesID {
+  id           Int    @id @default(autoincrement())
+  codeForcesID String @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+
+  @@map("codeforcesid")
+}
+
+model Contest {
+  id           Int           @id @default(autoincrement())
+  user         User          @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdBy    Int
+  startAt      DateTime
+  problems     Problem[]
+  participants Participant[]
+
+  @@map("contest")
+}
+
+model Problem {
+  id           Int     @id @default(autoincrement())
+  cfContestID  Int
+  cfProblemIdx String
+  points       Int     @default(0)
+  contest      Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestId    Int
+  user         User?    @relation(fields: [solvedBy], references: [id], onDelete: Cascade)
+  solvedBy     Int?
+
+  @@index([contestId, solvedBy])
+  @@map("problem")
+}
+
+model Participant {
+  id        Int     @id @default(autoincrement())
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  Contest   Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestId Int
+
+  @@map("participant")
+}

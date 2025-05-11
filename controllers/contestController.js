@@ -1,54 +1,74 @@
-import contest from "../models/contest.js";
-import profile from "../models/profile.js";
-import userModel from "../models/userModel.js";
+import apiError from '../utils/apiError.js';
+import apiResponse from '../utils/apiResponse.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import prisma from '../config/prisma.js';
 
-const createContest = async (req, res) => {
-    const userID = req.user.userID;
+const createContest = asyncHandler(
+    async (req, res) => {
+        const id = req.user.id;
+        const { startAt } = req.body;
 
-    try {
-        const [result] = await contest.addContest(userID);
-        const contestID = result.insertId;
+        const istDate = new Date(startAt);
+        const utcDate = new Date(istDate.toISOString());
 
-        return res.status(200).json({
-            message: 'Contest created successfully!',
-            contestID: contestID
+        const contest = await prisma.contest.create({
+            data: {
+                createdBy: id,
+                startAt: utcDate
+            }
         });
+
+        return res
+            .status(201)
+            .json(
+                new apiResponse(
+                    201,
+                    { contest },
+                    "Contest created successfully!"
+                )
+            )
     }
-    catch (err) {
-        return res.status(500).json({
-            Error: 'Not able to Create contest.',
-            Details: err.message
+);
+
+const addParticipant = asyncHandler(
+    async (req, res) => {
+        const contestID = parseInt(req.params.contestID);
+        const { user_name } = req.body;
+
+        const contestExists = await prisma.contest.findUnique({
+            where: {
+                id: contestID
+            }
         });
-    }
-}
-
-const addParticipant = async (req, res) => {
-    const contestID = req.params.contestID;
-    const { user_name } = req.body;
-
-    try {
-        const [contestExists] = await contest.getContest(contestID);
-        if (!contestExists.length) {
-            return res.status(404).json({ Error: 'Contest not found.' });
+        if (!contestExists) {
+            throw new apiError(404, "Contest not found.");
         }
 
-        const [user] = await userModel.findUser(user_name);
-        if (!user.length) {
-            return res.status(401).json({ Error: 'Invalid user name.' });
+        const user = await prisma.user.findUnique({
+            where: { user_name }
+        });
+        if (!user) {
+            throw new apiError(401, "Invalid user name.");
         }
 
-        const userID = user[0].userID;
-        await contest.addParticipant(contestID, userID);
-
-        return res.status(200).json({ message: 'Participant added successfully!' });
-    }
-    catch (err) {
-        return res.status(500).json({
-            Error: 'Not able to add participant.',
-            Details: err.message
+        const participant = await prisma.participant.create({
+            data: {
+                userId: user.id,
+                contestId: contestID
+            }
         });
+
+        return res
+            .status(201)
+            .json(
+                new apiResponse(
+                    201,
+                    { participant },
+                    "Participant added successfully!"
+                )
+            )
     }
-}
+);
 
 async function getSolvedProblems(codeForcesID, ratingLowerLimit, ratingUpperLimit) {
     try {
@@ -76,40 +96,48 @@ async function getSolvedProblems(codeForcesID, ratingLowerLimit, ratingUpperLimi
     }
 }
 
-const addProblem = async (req, res) => {
-    const contestID = req.params.contestID;
-    const { tags, ratingLowerLimit: rLL, ratingUpperLimit: rUL, points: pts } = req.body;
+const addProblem = asyncHandler(
+    async (req, res) => {
+        const contestID = parseInt(req.params.contestID);
+        const { tags, ratingLowerLimit: rLL, ratingUpperLimit: rUL, points: pts } = req.body;
 
-    const ratingLowerLimit = parseInt(rLL, 10);
-    const ratingUpperLimit = parseInt(rUL, 10);
-    const points = parseInt(pts, 10);
+        const ratingLowerLimit = parseInt(rLL, 10);
+        const ratingUpperLimit = parseInt(rUL, 10);
+        const points = parseInt(pts, 10);
 
-    if (isNaN(ratingLowerLimit) || isNaN(ratingUpperLimit) || isNaN(points)) {
-        return res.status(400).json({
-            Error: 'Invalid rating limits or points. They must be integers.'
+        if (isNaN(ratingLowerLimit) || isNaN(ratingUpperLimit) || isNaN(points)) {
+            throw new apiError(400, "Invalid rating limits or points. They must be integers.");
+        }
+
+        if (ratingLowerLimit > ratingUpperLimit) {
+            throw new apiError(400, "ratingLowerLimit must be less than or equal to ratingUpperLimit.");
+        }
+
+        let url = `https://codeforces.com/api/problemset.problems`;
+
+        const contestExists = await prisma.contest.findUnique({
+            where: {
+                id: contestID
+            }
         });
-    }
-
-    if (ratingLowerLimit > ratingUpperLimit) {
-        return res.status(400).json({
-            Error: 'ratingLowerLimit must be less than or equal to ratingUpperLimit.'
-        });
-    }
-
-    let url = `https://codeforces.com/api/problemset.problems`;
-
-    try {
-        const [contestExists] = await contest.getContest(contestID);
-        if (!contestExists.length) {
-            return res.status(404).json({ Error: 'Contest not found.' });
+        if (!contestExists) {
+            throw new apiError(404, "Contest not found.");
         }
 
         const solvedProblems = new Set();
-        const [participants] = await contest.getParticipants(contestID);
+        const participants = await prisma.participant.findMany({
+            where: {
+                contestId: contestID
+            }
+        });
 
         await Promise.all(participants.map(async (participant) => {
             try {
-                const [codeForcesDetails] = await profile.getProfile(participant.userID);
+                const codeForcesDetails = await prisma.codeForcesID.findMany({
+                    where: {
+                        userId: participant.id
+                    }
+                });
 
                 await Promise.all(codeForcesDetails.map(async (codeForcesUser) => {
                     try {
@@ -123,11 +151,16 @@ const addProblem = async (req, res) => {
                 }));
             }
             catch (err) {
-                console.error(`Error processing participant ${participant.userID}:`, err);
+                console.error(`Error processing participant ${participant.id}:`, err);
+                throw err;
             }
         }));
 
-        const [contestProblems] = await contest.getProblems(contestID);
+        const contestProblems = await prisma.problem.findMany({
+            where: {
+                contestId: contestID
+            }
+        });
         contestProblems.forEach(prob => solvedProblems.add(`${prob.cfContestID}${prob.cfProblemNo}`));
 
         if (tags?.length) url += `?tags=${tags.join(';')};`;
@@ -146,31 +179,47 @@ const addProblem = async (req, res) => {
         );
 
         if (!eligibleProblems.length) {
-            return res.status(404).json({ Error: 'No available problems matching criteria.' });
+            throw new apiError(404, "No available problems matching criteria.");
         }
 
         const selectedProblem = eligibleProblems[Math.floor(Math.random() * eligibleProblems.length)];
-        await contest.addProblem(contestID, selectedProblem.contestId, selectedProblem.index, null, points);
-
-        return res.status(200).json({
-            message: 'Problem added successfully!',
-            Problem: selectedProblem
+        const addedProblem = await prisma.problem.create({
+            data: {
+                cfContestID: selectedProblem.contestId,
+                cfProblemIdx: selectedProblem.index,
+                points,
+                contestId: contestID
+            }
         });
+
+        return res
+            .status(201)
+            .json(
+                new apiResponse(
+                    201,
+                    { addedProblem },
+                    "Problem added successfully!"
+                )
+            )
     }
-    catch (err) {
-        return res.status(500).json({
-            Error: 'Not able to add Problem.',
-            Details: err.message
+);
+
+const checkIfSolved = asyncHandler(
+    async (req, res) => {
+        const problemID = parseInt(req.params.problemID);
+        const id = req.user.id;
+
+        const codeForcesDetails = await prisma.codeForcesID.findMany({
+            where: {
+                userId: id
+            }
         });
-    }
-}
 
-const checkIfSolved = async (req, res) => {
-    const { cfContestID, cfProblemNo } = req.params;
-    const userID = req.user.userID;
-
-    try {
-        const [codeForcesDetails] = await profile.getProfile(userID);
+        const problem = await prisma.problem.findUnique({
+            where: {
+                id: problemID
+            }
+        });
 
         for (const codeForcesUser of codeForcesDetails) {
             try {
@@ -179,9 +228,7 @@ const checkIfSolved = async (req, res) => {
                 );
 
                 if (!submissionResponse.ok) {
-                    throw new Error(
-                        `Failed to fetch submissions for ${codeForcesUser.codeForcesID}: ${submissionResponse.status}`
-                    );
+                    throw new Error(`Failed to fetch submissions for ${codeForcesUser.codeForcesID}: ${submissionResponse.status}`);
                 }
 
                 const submissions = await submissionResponse.json();
@@ -189,32 +236,47 @@ const checkIfSolved = async (req, res) => {
                 for (const submission of submissions.result) {
                     if (
                         submission.verdict === 'OK' &&
-                        submission.problem.contestId == cfContestID &&
-                        submission.problem.index == cfProblemNo
+                        submission.problem.contestId == problem.cfContestID &&
+                        submission.problem.index == problem.cfProblemIdx
                     ) {
-                        return res.status(200).json({
-                            Status: 'Solved',
-                            handle: codeForcesUser.codeForcesID,
+
+                        const updatedProblem = await prisma.problem.update({
+                            where: {
+                                id: parseInt(problemID),
+                            },
+                            data: {
+                                solvedBy: id
+                            }
                         });
+
+                        return res
+                            .status(200)
+                            .json(
+                                new apiResponse(
+                                    200,
+                                    { updatedProblem },
+                                    `Problem solved by ${codeForcesUser.codeForcesID}`
+                                )
+                            )
                     }
                 }
             }
             catch (err) {
                 console.error(`Check Error with ${codeForcesUser.codeForcesID}:`, err.message);
+                throw err;
             }
         }
 
-        return res.status(200).json({
-            Status: 'Unsolved',
-            message: 'Problem not solved by any linked account',
-        });
+        return res
+            .status(200)
+            .json(
+                new apiResponse(
+                    200,
+                    { problem },
+                    "Problem not solved by any linked account."
+                )
+            )
     }
-    catch (err) {
-        return res.status(500).json({
-            Error: 'Some error occurred while checking.',
-            Details: err.message,
-        });
-    }
-};
+);
 
 export default { createContest, addParticipant, addProblem, checkIfSolved };

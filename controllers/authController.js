@@ -1,85 +1,195 @@
 import argon2 from "argon2";
-import userModel from "../models/userModel.js";
 import authService from "../services/authService.js";
+import apiError from '../utils/apiError.js';
+import apiResponse from '../utils/apiResponse.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import prisma from '../config/prisma.js';
 
-const register = async (req, res) => {
-    const { name, user_name, password } = req.body;
-
-    if (!name?.trim() || !user_name?.trim() || !password?.trim()) {
-        return res.status(400).json({ error: 'All fields are required' });
-    }
-
+const generateAccessAndRefereshTokens = async (user) => {
     try {
-        const hashedPassword = await argon2.hash(password);
-        const [result] = await userModel.addUser(name, user_name, hashedPassword);
-        const user = { userID: result.insertId, name, user_name };
+        const accessToken = authService.generateAccessToken(user);
+        const refreshToken = authService.generateRefreshToken(user);
 
-        const jwtToken = authService.generateToken(user);
-
-        res.cookie('token', jwtToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'Strict',
-            maxAge: 24 * 60 * 60 * 1000
+        await prisma.user.update({
+            where: {
+                id: user.id,
+            },
+            data: {
+                refreshToken: refreshToken,
+            }
         });
 
-        return res.status(201).json({ 
-            message: 'User registered successfully!', 
-            userID: result.insertId, 
-            userName: name, 
-            user_name: user_name 
-        });
-    } 
+        return { accessToken, refreshToken };
+    }
     catch (err) {
-        return res.status(500).json({ 
-            Error: 'Registration failed. Please try again.', 
-            Details: err.message 
-        });
+        throw new apiError(500, "Something went wrong while generating referesh and access token");
     }
 }
 
-const login = async (req, res) => {
-    const { user_name, password } = req.body;
+const register = asyncHandler(
+    async (req, res) => {
+        const { name, user_name, password } = req.body;
 
-    if (!user_name || !password) {
-        return res.status(400).json({ error: 'All fields are required' });
-    }
-
-    try {
-        const [user] = await userModel.findUser(user_name);
-
-        if (!user.length) {
-            return res.status(401).json({ Error: 'Invalid Credentials.' });
+        if (!name?.trim() || !user_name?.trim() || !password?.trim()) {
+            throw new apiError(400, "All fields are Required.");
         }
 
-        const isMatch = await argon2.verify(user[0].password, password);
+        const existingUser = await prisma.user.findUnique({
+            where: { user_name: user_name }
+        });
+
+        if (existingUser) {
+            throw new apiError(400, "User with this email already exists.");
+        }
+
+        const hashedPassword = await argon2.hash(password);
+
+        const newUser = await prisma.user.create({
+            data: {
+                name: name,
+                user_name: user_name,
+                password: hashedPassword
+            },
+            select: {
+                id: true,
+                name: true,
+                user_name: true
+            }
+        });
+
+        const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(newUser);
+
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+        return res
+            .status(201)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new apiResponse(
+                    201,
+                    { newUser, accessToken, refreshToken },
+                    "User registered successfully!"
+                )
+            )
+    }
+);
+
+const login = asyncHandler(
+    async (req, res) => {
+        const { user_name, password } = req.body;
+
+        if (!user_name?.trim() || !password?.trim()) {
+            throw new apiError(400, "All fields are Required.");
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { user_name }
+        });
+
+        if (!user) {
+            throw new apiError(404, "User not found.");
+        }
+
+        const isMatch = await argon2.verify(user.password, password);
 
         if (!isMatch) {
-            return res.status(401).json({ Error: 'Invalid Credentials.' });
+            throw new apiError(401, "Invalid Credentials.");
         }
 
-        const jwtToken = authService.generateToken(user[0]);
+        const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user);
 
-        res.cookie('token', jwtToken, {
+        const options = {
             httpOnly: true,
-            secure: true,
-            sameSite: 'Strict',
-            maxAge: 24 * 60 * 60 * 1000
-        });
-
-        return res.status(200).json({ 
-            message: 'User logged in successfully!', 
-            userID: user[0].userID, 
-            userName: user[0].name, 
-            user_name: user[0].user_name 
-        });
-    } 
-    catch (err) {
-        return res.status(500).json({ 
-            Error: 'Login failed. Please try again.', 
-            Details: err.message 
-        });
+            secure: true
+        }
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new apiResponse(
+                    200,
+                    { user: { id: user.id, name: user.name, user_name: user.user_name }, accessToken, refreshToken },
+                    "User logged successfully!"
+                )
+            )
     }
-}
+);
 
-export default { register, login };
+const logout = asyncHandler(async (req, res) => {
+    const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+        throw new apiError(400, "No token found for logout");
+    }
+
+    const payload = authService.verifyToken(token);
+
+    await prisma.user.update({
+        where: { id: payload?.id },
+        data: { refreshToken: null }
+    });
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
+        .json(new apiResponse(200, {}, "User logged Out"))
+})
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if (!incomingRefreshToken) {
+        throw new apiError(401, "unauthorized request");
+    }
+
+    try {
+        const payload = authService.verifyToken(incomingRefreshToken);
+
+        const user = await prisma.user.findUnique({
+            where: {
+                id: payload.id
+            }
+        });
+
+        if (!user) {
+            throw new apiError(401, "Invalid refresh token");
+        }
+
+        if (incomingRefreshToken !== user?.refreshToken) {
+            throw new apiError(401, "Refresh token is expired or used");
+        }
+
+        const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user);
+        
+
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new apiResponse(
+                    200,
+                    { accessToken, refreshToken },
+                    "Access and Refresh token refreshed"
+                )
+            )
+    }
+    catch (error) {
+        throw new apiError(401, error?.message || "Invalid refresh token");
+    }
+});
+
+export default { register, login, logout, refreshAccessToken };

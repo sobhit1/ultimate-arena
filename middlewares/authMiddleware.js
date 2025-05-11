@@ -1,28 +1,24 @@
 import authService from "../services/authService.js";
+import apiError from '../utils/apiError.js';
+import asyncHandler from '../utils/asyncHandler.js';
 
-const checkForAuthCookie = async (req, res, next) => {
-    const token = req.cookies?.token;
+const checkForAuthCookie = asyncHandler(
+    async (req, _, next) => {
+        try {
+            const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
 
-    if (!token) {
-        return res.status(401).json({ error: "Unauthorized. Please log in." });
+            if (!token) {
+                throw new apiError(401, "Unauthorized Access");
+            }
+
+            const payload = authService.verifyToken(token);
+            req.user = payload;
+            return next();
+        }
+        catch (err) {
+            throw new apiError(401, err?.message || "Invalid access token");
+        }
     }
-
-    try {
-        const payload = authService.verifyToken(token);
-        req.user = payload;
-        return next();
-    } 
-    catch (err) {
-        res.clearCookie('token', { 
-            httpOnly: true, 
-            secure: true, 
-            sameSite: 'Strict' 
-        });
-
-        return res.status(401).json({ 
-            message: "Invalid or expired token, please log in again." 
-        });
-    }
-};
+);
 
 export default checkForAuthCookie;

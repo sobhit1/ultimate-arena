@@ -9,6 +9,6 @@ router.post('/add-participant/:contestID',contestController.addParticipant);
 
 router.post('/add-problem/:contestID',contestController.addProblem);
 
-router.post('/add-problem/:contestID/:cfContestID/:cfProblemNo',contestController.checkIfSolved);
+router.post('/check-problem/:contestID/:problemID',contestController.checkIfSolved);
 
 export default router;
