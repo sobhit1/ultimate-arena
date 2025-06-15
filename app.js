@@ -15,7 +15,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
-      'http://localhost:5173'
+      'http://localhost:5173',
+      'https://ultimate-arena-frontend.onrender.com'
     ];
 
     if (!origin || allowedOrigins.includes(origin)) {
