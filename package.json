@@ -1,15 +1,16 @@
 {
   "name": "ultimate-arena",
   "version": "1.0.0",
-  "description": "",
+  "description": "Ultimate Arena Backend - Node.js + Express + Prisma + PostgreSQL",
   "license": "ISC",
   "author": "Sobhit Raghav, Dharjinder Singh",
   "type": "module",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "nodemon app.js",
+    "postinstall": "prisma generate",
+    "postdeploy": "npx prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",
@@ -18,7 +19,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.13.0"
+    "pg": "^8.16.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",

@@ -1,5 +1,5 @@
 import authService from "../services/authService.js";
-import apiError from '../utils/apiError.js';
+import ApiError from '../utils/apiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 const checkForAuthCookie = asyncHandler(
@@ -8,7 +8,7 @@ const checkForAuthCookie = asyncHandler(
             const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
 
             if (!token) {
-                throw new apiError(401, "Unauthorized Access");
+                throw new ApiError(401, "Unauthorized Access");
             }
 
             const payload = authService.verifyToken(token);
@@ -16,7 +16,7 @@ const checkForAuthCookie = asyncHandler(
             return next();
         }
         catch (err) {
-            throw new apiError(401, err?.message || "Invalid access token");
+            throw new ApiError(401, err?.message || "Invalid access token");
         }
     }
 );

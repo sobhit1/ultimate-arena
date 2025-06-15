@@ -1,5 +1,5 @@
-import apiError from '../utils/apiError.js';
-import apiResponse from '../utils/apiResponse.js';
+import ApiError from '../utils/apiError.js';
+import ApiResponse from '../utils/apiResponse.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import prisma from '../config/prisma.js';
 
@@ -21,7 +21,7 @@ const createContest = asyncHandler(
         return res
             .status(201)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     201,
                     { contest },
                     "Contest created successfully!"
@@ -41,14 +41,14 @@ const addParticipant = asyncHandler(
             }
         });
         if (!contestExists) {
-            throw new apiError(404, "Contest not found.");
+            throw new ApiError(404, "Contest not found.");
         }
 
         const user = await prisma.user.findUnique({
             where: { user_name }
         });
         if (!user) {
-            throw new apiError(401, "Invalid user name.");
+            throw new ApiError(401, "Invalid user name.");
         }
 
         const participant = await prisma.participant.create({
@@ -61,7 +61,7 @@ const addParticipant = asyncHandler(
         return res
             .status(201)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     201,
                     { participant },
                     "Participant added successfully!"
@@ -106,11 +106,11 @@ const addProblem = asyncHandler(
         const points = parseInt(pts, 10);
 
         if (isNaN(ratingLowerLimit) || isNaN(ratingUpperLimit) || isNaN(points)) {
-            throw new apiError(400, "Invalid rating limits or points. They must be integers.");
+            throw new ApiError(400, "Invalid rating limits or points. They must be integers.");
         }
 
         if (ratingLowerLimit > ratingUpperLimit) {
-            throw new apiError(400, "ratingLowerLimit must be less than or equal to ratingUpperLimit.");
+            throw new ApiError(400, "ratingLowerLimit must be less than or equal to ratingUpperLimit.");
         }
 
         let url = `https://codeforces.com/api/problemset.problems`;
@@ -121,7 +121,7 @@ const addProblem = asyncHandler(
             }
         });
         if (!contestExists) {
-            throw new apiError(404, "Contest not found.");
+            throw new ApiError(404, "Contest not found.");
         }
 
         const solvedProblems = new Set();
@@ -179,7 +179,7 @@ const addProblem = asyncHandler(
         );
 
         if (!eligibleProblems.length) {
-            throw new apiError(404, "No available problems matching criteria.");
+            throw new ApiError(404, "No available problems matching criteria.");
         }
 
         const selectedProblem = eligibleProblems[Math.floor(Math.random() * eligibleProblems.length)];
@@ -195,7 +195,7 @@ const addProblem = asyncHandler(
         return res
             .status(201)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     201,
                     { addedProblem },
                     "Problem added successfully!"
@@ -252,7 +252,7 @@ const checkIfSolved = asyncHandler(
                         return res
                             .status(200)
                             .json(
-                                new apiResponse(
+                                new ApiResponse(
                                     200,
                                     { updatedProblem },
                                     `Problem solved by ${codeForcesUser.codeForcesID}`
@@ -270,7 +270,7 @@ const checkIfSolved = asyncHandler(
         return res
             .status(200)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     200,
                     { problem },
                     "Problem not solved by any linked account."

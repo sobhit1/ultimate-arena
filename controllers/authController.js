@@ -1,9 +1,9 @@
 import argon2 from "argon2";
 import authService from "../services/authService.js";
-import apiError from '../utils/apiError.js';
-import apiResponse from '../utils/apiResponse.js';
+import ApiError from '../utils/apiError.js';
+import ApiResponse from '../utils/apiResponse.js';
 import asyncHandler from '../utils/asyncHandler.js';
-import prisma from '../config/prisma.js';
+import prisma from '../config/prisma.ts';
 
 const generateAccessAndRefereshTokens = async (user) => {
     try {
@@ -22,7 +22,8 @@ const generateAccessAndRefereshTokens = async (user) => {
         return { accessToken, refreshToken };
     }
     catch (err) {
-        throw new apiError(500, "Something went wrong while generating referesh and access token");
+        console.error("Error generating access and refresh tokens:", err);
+        throw new ApiError(500, "Something went wrong while generating referesh and access token");
     }
 }
 
@@ -31,7 +32,7 @@ const register = asyncHandler(
         const { name, user_name, password } = req.body;
 
         if (!name?.trim() || !user_name?.trim() || !password?.trim()) {
-            throw new apiError(400, "All fields are Required.");
+            throw new ApiError(400, "All fields are Required.");
         }
 
         const existingUser = await prisma.user.findUnique({
@@ -39,7 +40,7 @@ const register = asyncHandler(
         });
 
         if (existingUser) {
-            throw new apiError(400, "User with this email already exists.");
+            throw new ApiError(400, "User with this email already exists.");
         }
 
         const hashedPassword = await argon2.hash(password);
@@ -68,7 +69,7 @@ const register = asyncHandler(
             .cookie("accessToken", accessToken, options)
             .cookie("refreshToken", refreshToken, options)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     201,
                     { newUser, accessToken, refreshToken },
                     "User registered successfully!"
@@ -82,7 +83,7 @@ const login = asyncHandler(
         const { user_name, password } = req.body;
 
         if (!user_name?.trim() || !password?.trim()) {
-            throw new apiError(400, "All fields are Required.");
+            throw new ApiError(400, "All fields are Required.");
         }
 
         const user = await prisma.user.findUnique({
@@ -90,13 +91,13 @@ const login = asyncHandler(
         });
 
         if (!user) {
-            throw new apiError(404, "User not found.");
+            throw new ApiError(404, "User not found.");
         }
 
         const isMatch = await argon2.verify(user.password, password);
 
         if (!isMatch) {
-            throw new apiError(401, "Invalid Credentials.");
+            throw new ApiError(401, "Invalid Credentials.");
         }
 
         const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user);
@@ -110,7 +111,7 @@ const login = asyncHandler(
             .cookie("accessToken", accessToken, options)
             .cookie("refreshToken", refreshToken, options)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     200,
                     { user: { id: user.id, name: user.name, user_name: user.user_name }, accessToken, refreshToken },
                     "User logged successfully!"
@@ -122,7 +123,7 @@ const login = asyncHandler(
 const logout = asyncHandler(async (req, res) => {
     const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
     if (!token) {
-        throw new apiError(400, "No token found for logout");
+        throw new ApiError(400, "No token found for logout");
     }
 
     const payload = authService.verifyToken(token);
@@ -141,14 +142,14 @@ const logout = asyncHandler(async (req, res) => {
         .status(200)
         .clearCookie("accessToken", options)
         .clearCookie("refreshToken", options)
-        .json(new apiResponse(200, {}, "User logged Out"))
+        .json(new ApiResponse(200, {}, "User logged Out"))
 })
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
     const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
 
     if (!incomingRefreshToken) {
-        throw new apiError(401, "unauthorized request");
+        throw new ApiError(401, "unauthorized request");
     }
 
     try {
@@ -161,11 +162,11 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         });
 
         if (!user) {
-            throw new apiError(401, "Invalid refresh token");
+            throw new ApiError(401, "Invalid refresh token");
         }
 
         if (incomingRefreshToken !== user?.refreshToken) {
-            throw new apiError(401, "Refresh token is expired or used");
+            throw new ApiError(401, "Refresh token is expired or used");
         }
 
         const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user);
@@ -180,7 +181,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             .cookie("accessToken", accessToken, options)
             .cookie("refreshToken", refreshToken, options)
             .json(
-                new apiResponse(
+                new ApiResponse(
                     200,
                     { accessToken, refreshToken },
                     "Access and Refresh token refreshed"
@@ -188,7 +189,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             )
     }
     catch (error) {
-        throw new apiError(401, error?.message || "Invalid refresh token");
+        throw new ApiError(401, error?.message || "Invalid refresh token");
     }
 });
 
