@@ -9,9 +9,8 @@ const isProduction = process.env.NODE_ENV === "production";
 
 const cookieOptions = {
   httpOnly: true,
-  secure: isProduction,
-  sameSite: isProduction ? "None" : "Lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000
+  secure: true,
+  sameSite: "None"
 };
 
 const generateAccessAndRefreshTokens = async (user) => {
