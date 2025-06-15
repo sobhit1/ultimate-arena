@@ -3,7 +3,7 @@ import authService from "../services/authService.js";
 import ApiError from '../utils/apiError.js';
 import ApiResponse from '../utils/apiResponse.js';
 import asyncHandler from '../utils/asyncHandler.js';
-import prisma from '../config/prisma.ts';
+import prisma from '../config/prisma.js';
 
 const generateAccessAndRefereshTokens = async (user) => {
     try {
